@@ -8,6 +8,10 @@ RUN echo "http://nl.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositorie
 	cups-client \
 	cups-filters \
 	cups-dev \
+	gutenprint \
+	gutenprint-libs \
+	gutenprint-doc \
+	gutenprint-cups \
 	ghostscript \
 	avahi \
 	inotify-tools \
