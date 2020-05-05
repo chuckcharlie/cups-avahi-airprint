@@ -1,0 +1,20 @@
+sudo: 'required'
+
+services:
+  - 'docker'
+
+before_install:
+  - 'sudo sh .travis/main.sh'
+
+script:
+  - 'make test'
+  - 'make image'
+
+# To have `DOCKER_USERNAME` and `DOCKER_PASSWORD`
+# use `travis env set DOCKER_USERNAME ...`
+# use `travis env set DOCKER_PASSWORD ...`
+deploy:
+  provider: script
+  script: docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD && make push-image
+  on:
+    branch: master
