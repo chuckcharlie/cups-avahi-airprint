@@ -1,5 +1,5 @@
-IMAGE := firilith/gekko
-VERSION:= $(shell grep GEKKO Dockerfile | awk '{print $2}' | cut -d '=' -f 2)
+IMAGE := firilith/cups-avahi-airprint
+VERSION:= $(shell grep CUPS Dockerfile | awk '{print $2}' | cut -d '=' -f 2)
 
 test:
 	true
