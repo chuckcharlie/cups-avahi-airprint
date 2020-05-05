@@ -1,7 +1,7 @@
 FROM ubuntu:bionic
 
 ENV CANON_DRIVER_URL='http://gdlp01.c-wss.com/gds/8/0100007658/08/linux-UFRII-drv-v370-uken-05.tar.gz'
-ENV CUPS=1.0
+ENV CUPS=1.1
 
 # Add repos
 RUN echo 'deb http://us.archive.ubuntu.com/ubuntu/ bionic multiverse' >> /etc/apt/sources.list.d/multiverse.list && \
