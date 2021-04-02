@@ -13,6 +13,7 @@ RUN echo "http://nl.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositorie
 	gutenprint-doc \
 	gutenprint-cups \
 	ghostscript \
+	hplip \
 	avahi \
 	inotify-tools \
 	python3 \
