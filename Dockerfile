@@ -1,6 +1,6 @@
 FROM alpine:3.18
 
-# Install the packages we need. Avahi will be included
+# Upgrade Alpine, install stable Alpine packages, install Edge Alpine packages, install pycups
 RUN	apk upgrade --no-cache && \
 	apk add --no-cache cups \
 	cups-libs \
@@ -16,21 +16,18 @@ RUN	apk upgrade --no-cache && \
 	py3-pip \
 	build-base \
 	wget \
-	rsync
-
-RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing \
+	rsync && \
+	apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing \
 	hplip \
 	gutenprint \
 	gutenprint-libs \
 	gutenprint-doc \
-	gutenprint-cups
-
-ADD requirements.txt .
-RUN pip3 install --no-cache-dir --upgrade pip && \
+	gutenprint-cups && \
 	pip3 install --no-cache-dir -r requirements.txt
 
 # This will use port 631
-EXPOSE 631
+EXPOSE 631/tcp
+EXPOSE 5353/udp
 
 # We want a mount for these
 VOLUME /config
