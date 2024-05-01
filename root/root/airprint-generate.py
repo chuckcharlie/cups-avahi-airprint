@@ -77,7 +77,6 @@ DOCUMENT_TYPES = {
     'image/urf': True,
     'image/png': True,
     'image/tiff': True,
-    'image/png': True,
     'image/jpeg': True,
     'image/gif': True,
     'text/plain': True,
@@ -126,6 +125,7 @@ class AirPrintGenerate(object):
         for p, v in list(printers.items()):
             if v['printer-is-shared']:
                 attrs = conn.getPrinterAttributes(p)
+
                 uri = urlparse.urlparse(v['printer-uri-supported'])
 
                 tree = ElementTree()
@@ -170,26 +170,22 @@ class AirPrintGenerate(object):
                 service.append(desc)
 
                 product = Element('txt-record')
-                product.text = 'product=(GPL Ghostscript)'
+                product.text = f"product=({v['printer-info']})"
                 service.append(product)
 
-                state = Element('txt-record')
-                state.text = 'printer-state=%s' % (v['printer-state'])
-                service.append(state)
-
-                ptype = Element('txt-record')
-                ptype.text = 'printer-type=%s' % (hex(v['printer-type']))
-                service.append(ptype)
+                kind = Element('txt-record')
+                kind.text = 'kind=document'
+                service.append(kind)
 
                 if attrs['color-supported']:
                     color = Element('txt-record')
                     color.text = 'Color=T'
                     service.append(color)
 
-                if attrs['media-default'] == 'iso_a4_210x297mm':
-                    max_paper = Element('txt-record')
-                    max_paper.text = 'PaperMax=legal-A4'
-                    service.append(max_paper)
+                paper_max = 'PaperMax=legal-A4'
+                max_paper = Element('txt-record')
+                max_paper.text = paper_max
+                service.append(max_paper)
 
                 pdl = Element('txt-record')
                 fmts = []
@@ -210,7 +206,7 @@ class AirPrintGenerate(object):
                 dropped = []
 
                 # TODO XXX FIXME all fields should be checked for 255 limit
-                while len('pdl=%s' % (fmts)) >= 255:
+                while len('pdl=%s' % fmts) >= 255:
                     (fmts, drop) = fmts.rsplit(',', 1)
                     dropped.append(drop)
 
@@ -229,18 +225,18 @@ class AirPrintGenerate(object):
                 
                 if self.directory:
                     fname = os.path.join(self.directory, fname)
-                
-                f = open(fname, 'w')
 
                 if etree:
-                    tree.write(f, pretty_print=True, xml_declaration=True, encoding="UTF-8")
+                    etree.indent(tree)
+                    tree.write(fname, xml_declaration=True, encoding="UTF-8")
                 else:
+                    f = open(fname, 'w')
                     xmlstr = tostring(tree.getroot())
                     doc = parseString(xmlstr)
                     dt= minidom.getDOMImplementation('').createDocumentType('service-group', None, 'avahi-service.dtd')
                     doc.insertBefore(dt, doc.documentElement)
                     doc.writexml(f)
-                f.close()
+                    f.close()
                 
                 if self.verbose:
                     sys.stderr.write('Created: %s%s' % (fname, os.linesep))
