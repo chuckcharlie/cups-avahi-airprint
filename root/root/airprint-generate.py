@@ -77,7 +77,6 @@ DOCUMENT_TYPES = {
     'image/urf': True,
     'image/png': True,
     'image/tiff': True,
-    'image/png': True,
     'image/jpeg': True,
     'image/gif': True,
     'text/plain': True,
@@ -170,16 +169,12 @@ class AirPrintGenerate(object):
                 service.append(desc)
 
                 product = Element('txt-record')
-                product.text = 'product=(GPL Ghostscript)'
+                product.text = f"product=({v['printer-info']})"
                 service.append(product)
 
-                state = Element('txt-record')
-                state.text = 'printer-state=%s' % (v['printer-state'])
-                service.append(state)
-
-                ptype = Element('txt-record')
-                ptype.text = 'printer-type=%s' % (hex(v['printer-type']))
-                service.append(ptype)
+                kind = Element('txt-record')
+                kind.text = 'kind=document'
+                service.append(kind)
 
                 if attrs['color-supported']:
                     color = Element('txt-record')
@@ -245,17 +240,17 @@ class AirPrintGenerate(object):
                 if self.directory:
                     fname = os.path.join(self.directory, fname)
                 
-                f = open(fname, 'w')
-
                 if etree:
-                    tree.write(f, pretty_print=True, xml_declaration=True, encoding="UTF-8")
+                    etree.indent(tree)
+                    tree.write(fname, xml_declaration=True, encoding="UTF-8")
                 else:
+                    f = open(fname, 'w')
                     xmlstr = tostring(tree.getroot())
                     doc = parseString(xmlstr)
                     dt= minidom.getDOMImplementation('').createDocumentType('service-group', None, 'avahi-service.dtd')
                     doc.insertBefore(dt, doc.documentElement)
                     doc.writexml(f)
-                f.close()
+                    f.close()
                 
                 if self.verbose:
                     sys.stderr.write('Created: %s%s' % (fname, os.linesep))
