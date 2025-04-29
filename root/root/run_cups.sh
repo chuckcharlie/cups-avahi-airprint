@@ -13,7 +13,7 @@ if [ -z "$CUPSPASSWORD" ]; then
 fi
 
 if [ $(grep -ci $CUPSADMIN /etc/shadow) -eq 0 ]; then
-    adduser -S -G lpadmin --no-create-home $CUPSADMIN 
+    adduser -S -G lpadmin --no-create-home $CUPSADMIN
 fi
 echo $CUPSADMIN:$CUPSPASSWORD | chpasswd
 
@@ -39,22 +39,38 @@ fi
 # Function to handle cleanup on exit
 cleanup() {
     echo "Cleaning up..."
-    if [ -f /var/run/avahi-daemon.pid ]; then
-        PID=$(cat /var/run/avahi-daemon.pid)
+    # Kill any running avahi-daemon processes
+    if [ -f /var/run/avahi-daemon/pid ]; then
+        PID=$(cat /var/run/avahi-daemon/pid)
         if kill -0 $PID 2>/dev/null; then
             kill $PID
-            rm -f /var/run/avahi-daemon.pid
+            rm -f /var/run/avahi-daemon/pid
         fi
     fi
+    
+    # Kill any running printer-update.sh processes
+    pkill -f printer-update.sh || true
+    
     exit 0
 }
 
 # Set up trap for cleanup
 trap cleanup SIGTERM SIGINT
 
+# Ensure any stale PID files are removed before starting
+if [ -f /var/run/avahi-daemon/pid ]; then
+    rm -f /var/run/avahi-daemon/pid
+fi
+if [ -f /var/run/avahi-daemon.pid ]; then
+    rm -f /var/run/avahi-daemon.pid
+fi
+
 # Start avahi-daemon service in the background
 /root/avahi-service.sh &
 AVAHI_SERVICE_PID=$!
+
+# Wait a moment to ensure avahi-daemon has started and created its PID file
+sleep 2
 
 # Start CUPS and printer update
 /root/printer-update.sh &
