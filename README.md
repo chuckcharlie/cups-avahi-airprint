@@ -52,3 +52,18 @@ services:
 * Make sure you select `Share This Printer` when configuring the printer in CUPS.
 * ***After configuring your printer, you need to close the web browser for at least 60 seconds. CUPS will not write the config files until it detects the connection is closed for as long as a minute.***
 
+## Troubleshooting
+
+### PPD Version Compatibility
+If you see an error like this:
+```
+The PPD version (5.3.4) is not compatible with Gutenprint 5.3.5. Please run `/usr/sbin/cups-genppdupdate' as administrator.
+```
+
+Run this command to update your PPD files:
+```bash
+docker exec <container name> sh -c 'for ppd in /config/ppd/*.ppd; do perl /usr/sbin/cups-genppdupdate -v "$ppd"; done'
+```
+
+This will update any Gutenprint PPD files to be compatible with the installed version of Gutenprint (5.3.5).
+
