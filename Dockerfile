@@ -25,7 +25,7 @@ RUN echo -e "https://dl-cdn.alpinelinux.org/alpine/edge/testing\nhttps://dl-cdn.
 RUN apk add --no-cache git cmake && \
     git clone https://github.com/pdewacht/brlaser.git && \
     cd brlaser && \
-    cmake . && \
+    cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 . && \
     make && \
     make install && \
     cd .. && \
