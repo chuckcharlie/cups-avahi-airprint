@@ -11,5 +11,4 @@ services:
       CUPSADMIN: cups
       CUPSPASSWORD: cups
     volumes:
-      - "./services:/services"
       - "./config:/config"

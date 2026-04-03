@@ -14,11 +14,8 @@ RUN echo -e "https://dl-cdn.alpinelinux.org/alpine/edge/testing\nhttps://dl-cdn.
 	dbus \
 	inotify-tools \
 	python3 \
-	python3-dev \
 	build-base \
 	wget \
-	rsync \
-	py3-pycups \
 	perl \
 	&& rm -rf /var/cache/apk/*
 
@@ -51,7 +48,6 @@ EXPOSE 631
 
 # We want a mount for these
 VOLUME /config
-VOLUME /services
 
 # Add scripts
 ADD root /

@@ -11,7 +11,6 @@ This Alpine-based Docker image runs a CUPS instance that is meant as an AirPrint
 
 ### Volumes:
 * `/config`: where the persistent printer configs will be stored
-* `/services`: where the Avahi service files will be generated
 
 ### Variables:
 * `CUPSADMIN`: the CUPS admin user you want created - default is CUPSADMIN if unspecified
@@ -23,7 +22,6 @@ This Alpine-based Docker image runs a CUPS instance that is meant as an AirPrint
 ### Example run command:
 ```
 docker run --name cups --restart unless-stopped  --net host\
-  -v <your services dir>:/services \
   -v <your config dir>:/config \
   -e CUPSADMIN="<username>" \
   -e CUPSPASSWORD="<password>" \
@@ -39,7 +37,6 @@ services:
     container_name: cups
     network_mode: host
     volumes:
-      - </your/services/dir>:/services
       - </your/config/dir>:/config
     environment:
       CUPSADMIN: "<YourAdminUsername>"
