@@ -24,6 +24,7 @@ CUPS registers shared printers directly with Avahi via D-Bus for mDNS/DNS-SD adv
 ### Variables:
 * `CUPSADMIN`: the CUPS admin user you want created - default is CUPSADMIN if unspecified
 * `CUPSPASSWORD`: the password for the CUPS admin user - default is the same value as `CUPSADMIN` if unspecified
+* `AVAHI_HOSTNAME`: the mDNS hostname Avahi will advertise - default is `cups-airprint`. Set this to a unique name if you have multiple instances, or if the default conflicts with your host's mDNS daemon (common on NAS devices like UGreen, Synology, etc.)
 
 ### Ports/Network:
 * Must be run on host network. This is required to support multicasting which is needed for Airprint.

@@ -82,6 +82,14 @@ start_dbus() {
     echo "dbus-daemon started"
 }
 
+# Set an explicit host-name in avahi-daemon.conf to prevent conflicts
+# with the host's own mDNS daemon when running in host network mode.
+configure_avahi_hostname() {
+    local hostname="${AVAHI_HOSTNAME:-cups-airprint}"
+    echo "Setting Avahi hostname to: ${hostname}"
+    sed -i "s/^#*host-name=.*/host-name=${hostname}/" /etc/avahi/avahi-daemon.conf
+}
+
 # Function to start avahi-daemon
 start_avahi() {
     echo "Starting avahi-daemon..."
@@ -92,6 +100,8 @@ start_avahi() {
     if ! wait_for_network; then
         echo "Network not ready after 30 seconds, starting anyway..."
     fi
+
+    configure_avahi_hostname
 
     # Ensure D-Bus is running before starting Avahi
     if ! pgrep -x dbus-daemon > /dev/null; then
