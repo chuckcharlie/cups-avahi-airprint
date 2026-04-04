@@ -71,6 +71,17 @@ wait_for_network() {
     return 1
 }
 
+# Function to start dbus-daemon (required for CUPS <-> Avahi communication)
+start_dbus() {
+    echo "Starting dbus-daemon..."
+    mkdir -p /run/dbus
+    if [ -f /run/dbus/pid ]; then
+        rm -f /run/dbus/pid
+    fi
+    dbus-daemon --system
+    echo "dbus-daemon started"
+}
+
 # Function to start avahi-daemon
 start_avahi() {
     echo "Starting avahi-daemon..."
@@ -82,14 +93,14 @@ start_avahi() {
         echo "Network not ready after 30 seconds, starting anyway..."
     fi
 
-    # Run in foreground to capture logs in container logs
-    # Removed -D flag to prevent daemonizing, ensuring logs go to stdout/stderr
-    # Adding debug flag for more verbose logging
+    # Ensure D-Bus is running before starting Avahi
+    if ! pgrep -x dbus-daemon > /dev/null; then
+        start_dbus
+    fi
+
     echo "Starting avahi-daemon in foreground mode..."
     exec avahi-daemon --no-drop-root --no-chroot --no-proc-title --debug
 
-    # Note: The exec command replaces the current process with avahi-daemon
-    # This function will not return unless there's an error starting avahi-daemon
     echo "Failed to start avahi-daemon"
     return 1
 }
