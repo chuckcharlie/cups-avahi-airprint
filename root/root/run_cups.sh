@@ -64,8 +64,15 @@ fi
 /root/avahi-service.sh &
 AVAHI_SERVICE_PID=$!
 
-# Wait a moment to ensure avahi-daemon has started and created its PID file
-sleep 2
+# Wait for D-Bus and Avahi to be ready before starting CUPS
+echo "Waiting for D-Bus and Avahi to be ready..."
+for i in $(seq 1 30); do
+    if [ -S /run/dbus/system_bus_socket ] && [ -f /var/run/avahi-daemon/pid ]; then
+        echo "D-Bus and Avahi ready after ${i}s"
+        break
+    fi
+    sleep 1
+done
 
 # Start CUPS and printer update
 /root/printer-update.sh &
