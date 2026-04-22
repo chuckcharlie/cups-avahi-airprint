@@ -75,8 +75,8 @@ wait_for_network() {
 start_dbus() {
     echo "Starting dbus-daemon..."
     mkdir -p /run/dbus
-    if [ -f /run/dbus/pid ]; then
-        rm -f /run/dbus/pid
+    if [ -f /run/dbus/dbus.pid ]; then
+        rm -f /run/dbus/dbus.pid
     fi
     dbus-daemon --system
     echo "dbus-daemon started"
