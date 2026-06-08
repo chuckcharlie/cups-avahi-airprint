@@ -11,6 +11,12 @@ This Alpine-based Docker image runs a CUPS instance that is meant as an AirPrint
 
 CUPS registers shared printers directly with Avahi via D-Bus for mDNS/DNS-SD advertisement. When you add a printer in CUPS and mark it as shared, it automatically becomes discoverable by iPhones, iPads, and Macs on your network -- no extra configuration needed.
 
+## Changes in v2.1
+
+- **Optional `TZ` environment variable**: set `TZ` to an IANA timezone name (e.g. `Europe/Vienna`) to make container time and CUPS log timestamps match your local zone. Defaults to UTC when unset, and falls back to UTC with a warning if the value isn't a valid zone — closes [#50](https://github.com/chuckcharlie/cups-avahi-airprint/issues/50).
+- **Hardened startup ordering**: replaced the fixed `sleep 2` before launching CUPS with a readiness loop that waits for the D-Bus socket and Avahi pid file. Avoids a race on slower hosts where CUPS could start before Avahi was ready and silently fail to register printers — fixes [#49](https://github.com/chuckcharlie/cups-avahi-airprint/pull/49). Also corrects D-Bus pidfile cleanup so stale pidfiles are actually removed on container restart.
+- **Build fix**: added `edge/community` to the apk repository list. Alpine moved `cups-pdf` out of `edge/main` and `edge/testing`, so the package wasn't resolving anymore.
+
 ## Changes in v2.0
 
 - **Native DNS-SD registration**: CUPS now registers printers with Avahi directly over D-Bus, replacing the previous `airprint-generate.py` script that manually created Avahi service files. This fixes an issue where iOS devices would show duplicate printer entries due to a mismatch between the mDNS service name and the CUPS IPP response.
