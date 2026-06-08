@@ -10,5 +10,6 @@ services:
     environment:
       CUPSADMIN: cups
       CUPSPASSWORD: cups
+      # TZ: Europe/Vienna  # optional, defaults to UTC
     volumes:
       - "./config:/config"

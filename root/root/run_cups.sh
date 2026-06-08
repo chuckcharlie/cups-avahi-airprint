@@ -2,6 +2,18 @@
 set -e
 set -x
 
+# Apply TZ if provided. Falls through to the image default (UTC) on missing
+# tzdata or invalid zone names so a typo can't keep the container from booting.
+if [ -n "$TZ" ]; then
+    if [ -f "/usr/share/zoneinfo/$TZ" ]; then
+        ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime
+        echo "$TZ" > /etc/timezone
+        echo "Timezone set to $TZ"
+    else
+        echo "Warning: TZ=$TZ is not a valid zone, leaving system as UTC"
+    fi
+fi
+
 # Is CUPSADMIN set? If not, set to default
 if [ -z "$CUPSADMIN" ]; then
     CUPSADMIN="cupsadmin"
