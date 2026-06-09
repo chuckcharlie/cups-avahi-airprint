@@ -29,6 +29,49 @@ if [ $(grep -ci $CUPSADMIN /etc/shadow) -eq 0 ]; then
 fi
 echo $CUPSADMIN:$CUPSPASSWORD | chpasswd
 
+# Ensure AirPrint clients can submit print jobs without a password prompt.
+#
+# iOS/macOS print using Create-Job + Send-Document. The stock CUPS "default"
+# operation policy allows Create-Job anonymously but requires authentication
+# for Send-Document/Send-URI (Require user @OWNER @SYSTEM). The device gets a
+# 401 mid-print and pops a username/password dialog; if it is dismissed the
+# job times out and is aborted with "no files". This was masked before v2.0
+# because printers were advertised via static Avahi .service files; native
+# CUPS DNS-SD registration exposes the real policy.
+#
+# We move only Send-Document/Send-URI into the anonymous <Limit> of the
+# "default" policy so document submission succeeds without auth, while leaving
+# job-management operations (cancel, hold, release, ...) owner-restricted.
+#
+# Runs against whatever config is active in /etc/cups/cupsd.conf, so it covers
+# both fresh installs (baked-in config) and existing installs (restored from
+# /config/cupsd.conf). Idempotent, and scoped to the "default" policy block so
+# the "authenticated" and "kerberos" policies are left untouched.
+ensure_anonymous_printing() {
+    conf=/etc/cups/cupsd.conf
+
+    # Already patched (or no such config)? Nothing to do.
+    if grep -q 'Create-Job Print-Job Print-URI Validate-Job Send-Document' "$conf" 2>/dev/null; then
+        return 0
+    fi
+
+    awk '
+        /^[[:space:]]*<Policy default>/ { in_default = 1 }
+        /^[[:space:]]*<\/Policy>/       { in_default = 0 }
+        {
+            if (in_default && /<Limit / && /Create-Job/ && /Print-Job/ && !/Send-Document/) {
+                sub(/>[[:space:]]*$/, " Send-Document Send-URI>")
+            } else if (in_default && /<Limit / && /Send-Document/ && /Hold-Job/) {
+                gsub(/Send-Document /, "")
+                gsub(/Send-URI /, "")
+            }
+            print
+        }
+    ' "$conf" > "$conf.tmp" && mv "$conf.tmp" "$conf" \
+        && echo "Patched CUPS 'default' policy to allow anonymous Send-Document (AirPrint)." \
+        || rm -f "$conf.tmp"
+}
+
 mkdir -p /config/ppd
 rm -rf /etc/cups/ppd
 ln -s /config/ppd /etc/cups
@@ -42,6 +85,11 @@ if [ `ls -l /config/cupsd.conf 2>/dev/null | wc -l` -ne 0 ]; then
 else
     cp /etc/cups/cupsd.conf /config/cupsd.conf
 fi
+
+# Apply the AirPrint anonymous-printing fix to the now-active config and keep
+# the persisted copy in sync so it survives restarts.
+ensure_anonymous_printing
+cp /etc/cups/cupsd.conf /config/cupsd.conf
 
 # Function to handle cleanup on exit
 cleanup() {
