@@ -11,6 +11,10 @@ This Alpine-based Docker image runs a CUPS instance that is meant as an AirPrint
 
 CUPS registers shared printers directly with Avahi via D-Bus for mDNS/DNS-SD advertisement. When you add a printer in CUPS and mark it as shared, it automatically becomes discoverable by iPhones, iPads, and Macs on your network -- no extra configuration needed.
 
+## Changes in v2.1.1
+
+- **Fixed AirPrint password prompt mid-print**: iOS/macOS print using `Create-Job` + `Send-Document`. The stock CUPS `default` policy allows `Create-Job` anonymously but requires authentication for `Send-Document`, so devices got a `401` as the job reached the server and popped a "Password required" dialog; dismissing it left the job to time out and abort with "no files". This was masked before v2.0 because printers were advertised via static Avahi `.service` files — native CUPS DNS-SD registration exposes the real operation policy. `run_cups.sh` now moves `Send-Document`/`Send-URI` into the anonymous limit of the `default` policy on startup. The patch is idempotent, scoped to the `default` policy (the `authenticated` and `kerberos` policies are untouched), and applies to both fresh installs and existing installs whose `cupsd.conf` is restored from `/config`. Job-management operations (cancel, hold, release, ...) stay owner-restricted. Note: as with any AirPrint relay, this means any host permitted by the `<Location />` block can submit print jobs without authentication.
+
 ## Changes in v2.1
 
 - **Optional `TZ` environment variable**: set `TZ` to an IANA timezone name (e.g. `Europe/Vienna`) to make container time and CUPS log timestamps match your local zone. Defaults to UTC when unset, and falls back to UTC with a warning if the value isn't a valid zone — closes [#50](https://github.com/chuckcharlie/cups-avahi-airprint/issues/50).
