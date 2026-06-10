@@ -11,31 +11,19 @@ This Alpine-based Docker image runs a CUPS instance that is meant as an AirPrint
 
 CUPS registers shared printers directly with Avahi via D-Bus for mDNS/DNS-SD advertisement. When you add a printer in CUPS and mark it as shared, it automatically becomes discoverable by iPhones, iPads, and Macs on your network -- no extra configuration needed.
 
-## Changes in v2.1.1
+## Changelog
 
-- **Fixed AirPrint password prompt mid-print**: iOS/macOS print using `Create-Job` + `Send-Document`. The stock CUPS `default` policy allows `Create-Job` anonymously but requires authentication for `Send-Document`, so devices got a `401` as the job reached the server and popped a "Password required" dialog; dismissing it left the job to time out and abort with "no files". This was masked before v2.0 because printers were advertised via static Avahi `.service` files — native CUPS DNS-SD registration exposes the real operation policy. `run_cups.sh` now moves `Send-Document`/`Send-URI` into the anonymous limit of the `default` policy on startup. The patch is idempotent, scoped to the `default` policy (the `authenticated` and `kerberos` policies are untouched), and applies to both fresh installs and existing installs whose `cupsd.conf` is restored from `/config`. Job-management operations (cancel, hold, release, ...) stay owner-restricted. Note: as with any AirPrint relay, this means any host permitted by the `<Location />` block can submit print jobs without authentication.
+See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
-## Changes in v2.1
-
-- **Optional `TZ` environment variable**: set `TZ` to an IANA timezone name (e.g. `Europe/Vienna`) to make container time and CUPS log timestamps match your local zone. Defaults to UTC when unset, and falls back to UTC with a warning if the value isn't a valid zone — closes [#50](https://github.com/chuckcharlie/cups-avahi-airprint/issues/50).
-- **Hardened startup ordering**: replaced the fixed `sleep 2` before launching CUPS with a readiness loop that waits for the D-Bus socket and Avahi pid file. Avoids a race on slower hosts where CUPS could start before Avahi was ready and silently fail to register printers — fixes [#49](https://github.com/chuckcharlie/cups-avahi-airprint/pull/49). Also corrects D-Bus pidfile cleanup so stale pidfiles are actually removed on container restart.
-- **Build fix**: added `edge/community` to the apk repository list. Alpine moved `cups-pdf` out of `edge/main` and `edge/testing`, so the package wasn't resolving anymore.
-
-## Changes in v2.0
-
-- **Native DNS-SD registration**: CUPS now registers printers with Avahi directly over D-Bus, replacing the previous `airprint-generate.py` script that manually created Avahi service files. This fixes an issue where iOS devices would show duplicate printer entries due to a mismatch between the mDNS service name and the CUPS IPP response.
-- **Removed `/services` volume**: No longer needed since Avahi service files are no longer generated externally.
-- **Internal D-Bus daemon**: The container now runs its own `dbus-daemon` internally to support the native DNS-SD registration above.
-
-> **Upgrading from an earlier version? Remove `- /var/run/dbus:/var/run/dbus` from your compose file or `docker run` command if it's there.** Older example configurations (including in previous versions of this README and the upstream fork) included this bind mount. It was harmless pre-v2.0 because the container never started its own bus, but as of v2.0 the container's internal `dbus-daemon` will write into that shared directory and clobber the host's system D-Bus socket, breaking host services like systemd, smartd, and management UIs until the container is removed. This is most visible on NAS platforms but affects any host.
+> **⚠️ Upgrading from a pre-v2.0 version?** Remove `- /var/run/dbus:/var/run/dbus` from your compose file or `docker run` command if it's there. Pre-v2.0 this bind mount was harmless, but as of v2.0 the container runs its own `dbus-daemon`, which will write into that shared directory and clobber the host's system D-Bus socket — breaking host services like systemd, smartd, and management UIs until the container is removed. This is most visible on NAS platforms but affects any host.
 
 ## Configuration
 
 ### Volumes:
-* `/config`: where the persistent printer configs will be stored
+* `/config`: where the persistent printer configs are stored. This now also includes `/config/ssl`, where the self-signed TLS certificate and private key are kept so they stay stable across container restarts. The key is only used for the printer's own self-signed cert; keep this volume private.
 
 ### Variables:
-* `CUPSADMIN`: the CUPS admin user you want created - default is CUPSADMIN if unspecified
+* `CUPSADMIN`: the CUPS admin user you want created - defaults to `cupsadmin` if unspecified
 * `CUPSPASSWORD`: the password for the CUPS admin user - default is the same value as `CUPSADMIN` if unspecified
 * `AVAHI_HOSTNAME`: the mDNS hostname Avahi will advertise - default is `cups-airprint`. Set this to a unique name if you have multiple instances, or if the default conflicts with your host's mDNS daemon (common on NAS devices like UGreen, Synology, etc.)
 * `TZ`: optional IANA timezone name (e.g. `Europe/Vienna`, `America/Los_Angeles`) used for log timestamps inside the container. Defaults to UTC if unset or invalid.
@@ -69,7 +57,7 @@ services:
 
 ## Running on a NAS
 
-First, make sure you've removed any `- /var/run/dbus:/var/run/dbus` bind mount from your compose (see the upgrade note under **Changes in v2.0** above). That's the single most damaging misconfiguration on a NAS and will take down host services like the management UI.
+First, make sure you've removed any `- /var/run/dbus:/var/run/dbus` bind mount from your compose (see the upgrade warning under **Changelog** above). That's the single most damaging misconfiguration on a NAS and will take down host services like the management UI.
 
 NAS operating systems (TrueNAS Scale, Synology DSM, UGreen NAS OS, QNAP, etc.) typically run their own `avahi-daemon` on the host to advertise things like SMB shares, Time Machine, and Finder hostname visibility. When this container runs in host networking mode, both Avahi daemons share the host's network stack and can collide. Common symptoms:
 
