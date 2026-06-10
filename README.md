@@ -20,7 +20,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 ## Configuration
 
 ### Volumes:
-* `/config`: where the persistent printer configs are stored. This now also includes `/config/ssl`, where the self-signed TLS certificate and private key are kept so they stay stable across container restarts. The key is only used for the printer's own self-signed cert; keep this volume private.
+* `/config`: where the persistent printer configs will be stored
 
 ### Variables:
 * `CUPSADMIN`: the CUPS admin user you want created - defaults to `cupsadmin` if unspecified

@@ -89,42 +89,6 @@ fi
 # Apply the AirPrint anonymous-printing fix to the now-active config and keep
 # the persisted copy in sync so it survives restarts.
 ensure_anonymous_printing
-
-# Provide a stable, name-matching TLS certificate for ipps / DNS-SD clients.
-#
-# Linux CUPS clients (via cups-browsed) discover this printer over DNS-SD and
-# prefer the secure ipps:// record. They then validate the server certificate.
-# The default self-signed cert causes "cups-pki-invalid" for two reasons:
-#   1. Name mismatch: the cert is generated for the container hostname, not the
-#      mDNS name (AVAHI_HOSTNAME.local) the client actually connects to.
-#   2. Trust-On-First-Use breakage: CUPS regenerates the cert on every start,
-#      so a client that cached the old cert rejects the new one after a restart.
-#
-# Fix: pin ServerName to the advertised name (so the generated cert's SAN
-# includes <name>.local), and persist the SSL keychain in /config so the cert
-# is created once and reused across container recreation. AirPrint is unaffected
-# (it uses plain ipp and does not validate the certificate this way).
-provision_tls() {
-    tls_name="${AVAHI_HOSTNAME:-cups-airprint}"
-
-    # Persist the CUPS SSL keychain across container recreation.
-    mkdir -p /config/ssl
-    if [ ! -L /etc/cups/ssl ]; then
-        rm -rf /etc/cups/ssl
-        ln -s /config/ssl /etc/cups/ssl
-    fi
-    chown root:lp /config/ssl 2>/dev/null || true
-    chmod 700 /config/ssl 2>/dev/null || true
-
-    # Pin ServerName so the auto-generated certificate matches the mDNS name
-    # clients connect to over ipps://. ServerAlias * is already set, so this
-    # does not restrict which Host headers are accepted.
-    if ! grep -q '^ServerName ' /etc/cups/cupsd.conf; then
-        echo "ServerName ${tls_name}" >> /etc/cups/cupsd.conf
-    fi
-}
-provision_tls
-
 cp /etc/cups/cupsd.conf /config/cupsd.conf
 
 # Function to handle cleanup on exit
