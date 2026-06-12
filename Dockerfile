@@ -19,7 +19,7 @@ RUN echo -e "https://dl-cdn.alpinelinux.org/alpine/edge/testing\nhttps://dl-cdn.
 	perl \
 	splix \
 	tzdata \
-	&& rm -rf /var/cache/apk/*
+	jbigkit-dev 
 
 # Build and install brlaser from source
 RUN apk add --no-cache git cmake && \
@@ -45,6 +45,13 @@ RUN wget -O gutenprint-5.3.5.tar.xz https://sourceforge.net/projects/gimp-print/
     # Fix cups-genppdupdate script shebang
     sed -i '1s|.*|#!/usr/bin/perl|' /usr/sbin/cups-genppdupdate
 
+RUN git clone https://github.com/OpenPrinting/foo2zjs.git &&\
+    cd foo2zjs/ &&\
+    make -j$(nproc) && \
+    make install && \
+    cd .. && \
+	rm -rf foo2zjs /var/cache/apk/*
+	
 # This will use port 631
 EXPOSE 631
 
