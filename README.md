@@ -76,3 +76,27 @@ If none of the above works, pinning the image to `1.2.0` is a valid workaround w
 ## Add and set up printer:
 * CUPS will be configurable at http://[host ip]:631 using the CUPSADMIN/CUPSPASSWORD.
 * Make sure you select `Share This Printer` when configuring the printer in CUPS.
+
+## Reliable / remote AirPrint (configuration profile)
+
+AirPrint normally finds printers over multicast mDNS (Bonjour). On busy Wi-Fi this can be unreliable (the printer shows up only after retrying), and it does not work across subnets/VLANs or over a VPN. If you hit this, you can install an Apple **configuration profile** that pins the printer by address, so your devices connect over unicast IPP and skip discovery entirely.
+
+The image includes a generator script:
+
+```
+docker exec cups /root/make-airprint-profile.sh [HOST]
+```
+
+* It auto-discovers every printer you've marked **Share This Printer** and writes `/config/airprint.mobileconfig` (on your mounted `/config` volume).
+* `HOST` is optional. If omitted, the host's primary IPv4 address is auto-detected; the script prints what it chose and lists the host's other addresses so you can re-run with a different one if needed. Pass a value to use a stable DNS name, or a Tailscale name/IP for remote / cross-VLAN printing — for example:
+
+  ```
+  docker exec cups /root/make-airprint-profile.sh printserver.lan
+  ```
+
+To install: copy `airprint.mobileconfig` off your `/config` volume, AirDrop or email it to your iPhone/iPad/Mac, then install it via **Settings → General → VPN & Device Management**. The printer will then be available without relying on Bonjour, and reachable anywhere your device can route to the host on port 631 (e.g. over Tailscale).
+
+Notes:
+* The profile uses plain IPP (no TLS), matching this image's default. On a LAN or an encrypted overlay like Tailscale this is fine.
+* If you used an auto-detected IP and it later changes (DHCP), re-run the script — or use a reserved IP / DNS name to avoid that.
+

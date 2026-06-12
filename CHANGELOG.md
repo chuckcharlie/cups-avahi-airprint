@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.1.3
+
+- **AirPrint configuration-profile generator** (`make-airprint-profile.sh`): a helper that creates an Apple `.mobileconfig` for the printers shared by CUPS, pinning each one by hostname/IP so iPhones, iPads, and Macs connect over unicast IPP instead of relying on Bonjour/mDNS discovery. This makes AirPrint reliable on busy/multicast-flaky Wi-Fi and enables printing across subnets/VLANs or over a VPN such as Tailscale. Run `docker exec cups /root/make-airprint-profile.sh [HOST]` — it auto-discovers shared printers and writes `/config/airprint.mobileconfig`. `HOST` defaults to the host's primary IPv4 (auto-detected) and can be overridden with a stable DNS name or Tailscale name/IP. Install the profile on the device via Settings > General > VPN & Device Management.
+
 ## v2.1.2
 
 - **Stable, name-matching TLS certificate** (helps Linux clients and reduces AirPrint cert warnings): CUPS auto-generates a self-signed certificate for `ipps://` connections. Previously it was generated for the container hostname (not the advertised mDNS name) and regenerated on every container start. Linux CUPS clients discovering the printer over `ipps://` rejected it with `cups-pki-invalid`, and Apple devices could show "Encryption Credentials Changed" prompts after restarts. `run_cups.sh` now pins CUPS `ServerName` to `AVAHI_HOSTNAME` so the certificate's name matches what clients connect to, and persists the certificate in `/config/ssl` so it stays stable across container restarts and recreation. The certificate is still self-signed. **Note:** on first start of this version the certificate is regenerated once, so an iOS/macOS device that previously trusted the old certificate may show a one-time prompt to accept the new one.
