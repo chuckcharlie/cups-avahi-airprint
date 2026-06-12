@@ -4,7 +4,7 @@ Fork from [quadportnick/docker-cups-airprint](https://github.com/quadportnick/do
 
 **Docker Hub:** [hub.docker.com/r/chuckcharlie/cups-avahi-airprint](https://hub.docker.com/r/chuckcharlie/cups-avahi-airprint) — `docker pull chuckcharlie/cups-avahi-airprint:latest`
 
-### Supports ARM64 and AMD64.
+## Supports ARM64 and AMD64
 Use the *latest* or *version#* tags to auto choose the right architecture.
 
 This Alpine-based Docker image runs a CUPS instance that is meant as an AirPrint relay for printers that are already on the network but not AirPrint capable.
@@ -32,10 +32,11 @@ See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
 ### Ports/Network:
 * Must be run on host network. This is required to support multicasting which is needed for Airprint.
+* **Security note:** host networking exposes the CUPS web admin and printing on port `631` to your whole LAN, the print path accepts jobs without authentication, and traffic is not meaningfully encrypted. Set a strong `CUPSADMIN`/`CUPSPASSWORD` and only run this on a trusted network.
 
 ### Example run command:
 ```
-docker run --name cups --restart unless-stopped  --net host\
+docker run --name cups --restart unless-stopped --net host \
   -v <your config dir>:/config \
   -e CUPSADMIN="<username>" \
   -e CUPSPASSWORD="<password>" \
@@ -54,8 +55,14 @@ services:
     environment:
       CUPSADMIN: "<YourAdminUsername>"
       CUPSPASSWORD: "<YourPassword>"
+      # TZ: "Europe/Vienna"            # optional, defaults to UTC
+      # AVAHI_HOSTNAME: "cups-airprint" # optional, change if it conflicts on your network
     restart: unless-stopped
 ```
+
+## Add and set up printer:
+* CUPS will be configurable at http://[host ip]:631 using the CUPSADMIN/CUPSPASSWORD.
+* Make sure you select `Share This Printer` when configuring the printer in CUPS.
 
 ## Running on a NAS
 
@@ -74,10 +81,6 @@ Things to try, roughly in order of simplicity:
 3. **Run the container on a macvlan network** instead of host networking. This is the option to reach for if you want to keep the host's own Bonjour working (so you don't have to take the trade-off in option 2). Macvlan gives the container its own MAC and IP on your LAN, so its Avahi is on a different network endpoint from the host's and the two stop fighting over port 5353. **I have not tested this setup myself** and can't offer specific configuration guidance; one user reported success with it in #42 and the [Docker macvlan docs](https://docs.docker.com/network/drivers/macvlan/) are a reasonable starting point. Macvlan generally requires a wired Ethernet parent interface and does not work over Wi-Fi or on Docker Desktop.
 
 If none of the above works, pinning the image to `1.2.0` is a valid workaround while you sort it out. You'll miss future Alpine / CUPS / Avahi security updates, but the older image advertised through the static service file flow and didn't hit these conflicts as visibly.
-
-## Add and set up printer:
-* CUPS will be configurable at http://[host ip]:631 using the CUPSADMIN/CUPSPASSWORD.
-* Make sure you select `Share This Printer` when configuring the printer in CUPS.
 
 ## Reliable / remote AirPrint (configuration profile)
 
