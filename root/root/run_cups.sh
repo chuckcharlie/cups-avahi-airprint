@@ -178,11 +178,46 @@ provision_tls() {
     chown root:lp /config/ssl 2>/dev/null || true
     chmod 700 /config/ssl 2>/dev/null || true
 
+    # A name we cannot write into the sed expression below safely would abort
+    # startup under "set -e", and it would not resolve over mDNS either, so
+    # fall back to the documented default rather than failing to boot.
+    case "$tls_name" in
+        ''|*[!A-Za-z0-9._-]*)
+            echo "Warning: '${tls_name}' is not usable as a server name, using cups-airprint instead"
+            tls_name=cups-airprint
+            ;;
+    esac
+
     # Pin ServerName so the auto-generated certificate matches the mDNS name
     # clients connect to over ipps://. ServerAlias * is already set, so this
     # does not restrict which Host headers are accepted.
-    if ! grep -q '^ServerName ' /etc/cups/cupsd.conf; then
+    #
+    # The config restored from /config above already carries the ServerName a
+    # previous start wrote, so appending only when the directive is missing
+    # would pin an upgrader's certificate to the old name while Avahi
+    # advertises the new one -- the #52 name mismatch again. This happens as
+    # soon as AVAHI_HOSTNAME or USE_HOST_AVAHI changes on an existing install.
+    # So correct the value too, but only when it is one this script could have
+    # written; anything else is a hand-edited ServerName and is left alone.
+    current_name=$(sed -n 's/^ServerName //p' /etc/cups/cupsd.conf | tail -n 1)
+    managed_names="cups-airprint $(hostname)"
+    if [ -n "$AVAHI_HOSTNAME" ]; then
+        managed_names="${managed_names} ${AVAHI_HOSTNAME}"
+    fi
+
+    if [ -z "$current_name" ]; then
         echo "ServerName ${tls_name}" >> /etc/cups/cupsd.conf
+        echo "Pinned ServerName to ${tls_name} for ipps:// certificate matching."
+    elif [ "$current_name" = "$tls_name" ]; then
+        : # already correct
+    elif echo " $managed_names " | grep -qF -- " $current_name "; then
+        # Note: CUPS generates a fresh keychain entry for the new name on next
+        # start. The old /config/ssl/<name>.crt is left in place, and clients
+        # that pinned it on first use will prompt or refuse until they re-trust.
+        sed -i "s|^ServerName .*|ServerName ${tls_name}|" /etc/cups/cupsd.conf
+        echo "Updated ServerName from ${current_name} to ${tls_name} for ipps:// certificate matching."
+    else
+        echo "Warning: leaving hand-edited 'ServerName ${current_name}' in place; ipps:// clients may report cups-pki-invalid if it does not match the advertised mDNS name"
     fi
 }
 provision_tls
