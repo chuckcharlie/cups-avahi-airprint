@@ -91,9 +91,43 @@ fi
 ensure_anonymous_printing
 
 # Paper size used when new queues are created (the image default is Letter).
+#
+# Validated before use, for the same reason the TZ block above is: the baked-in
+# "DefaultPaperSize Letter" is what fixes #28 (US-Letter printers advertising
+# only A4/A5/A6, where iOS reports a successful print and CUPS never records a
+# job). A bad value here reintroduces that failure silently, so a value that is
+# not a known size warns and leaves the default alone instead of being written.
+# Sizes are checked against the ReadyPaperSizes list already in cupsd.conf; the
+# character guard also keeps the value from breaking the sed expression below,
+# which would abort startup under "set -e".
 if [ -n "$DEFAULT_PAPER_SIZE" ]; then
-    sed -i "s/^DefaultPaperSize .*/DefaultPaperSize ${DEFAULT_PAPER_SIZE}/" /etc/cups/cupsd.conf
-    echo "Default paper size set to ${DEFAULT_PAPER_SIZE}"
+    paper_size_ok=0
+    case "$DEFAULT_PAPER_SIZE" in
+        *[!A-Za-z0-9._-]*)
+            echo "Warning: DEFAULT_PAPER_SIZE=$DEFAULT_PAPER_SIZE contains unexpected characters, leaving the default paper size unchanged"
+            ;;
+        *)
+            ready_sizes=$(sed -n 's/^ReadyPaperSizes //p' /etc/cups/cupsd.conf | tr ',' ' ')
+            if [ -z "$ready_sizes" ]; then
+                # Config predates ReadyPaperSizes (pre-1.2.0 /config/cupsd.conf);
+                # nothing to validate against, so accept the vetted value.
+                paper_size_ok=1
+            elif echo " $ready_sizes " | grep -qF -- " $DEFAULT_PAPER_SIZE "; then
+                paper_size_ok=1
+            else
+                echo "Warning: DEFAULT_PAPER_SIZE=$DEFAULT_PAPER_SIZE is not one of the supported sizes ($ready_sizes), leaving the default paper size unchanged"
+            fi
+            ;;
+    esac
+
+    if [ "$paper_size_ok" -eq 1 ]; then
+        if grep -q '^DefaultPaperSize ' /etc/cups/cupsd.conf; then
+            sed -i "s|^DefaultPaperSize .*|DefaultPaperSize ${DEFAULT_PAPER_SIZE}|" /etc/cups/cupsd.conf
+        else
+            echo "DefaultPaperSize ${DEFAULT_PAPER_SIZE}" >> /etc/cups/cupsd.conf
+        fi
+        echo "Default paper size set to ${DEFAULT_PAPER_SIZE}"
+    fi
 fi
 
 # Optionally register printers with the host's avahi-daemon instead of running
