@@ -29,6 +29,8 @@ See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 * `CUPSPASSWORD`: the password for the CUPS admin user - default is the same value as `CUPSADMIN` if unspecified
 * `AVAHI_HOSTNAME`: the mDNS hostname Avahi will advertise - default is `cups-airprint`. Set this to a unique name if you have multiple instances, or if the default conflicts with your host's mDNS daemon (common on NAS devices like UGreen, Synology, etc.)
 * `TZ`: optional IANA timezone name (e.g. `Europe/Vienna`, `America/Los_Angeles`) used for log timestamps inside the container. Defaults to UTC if unset or invalid.
+* `DEFAULT_PAPER_SIZE`: optional CUPS paper size name (e.g. `A4`) used as the default for newly added printers. Defaults to `Letter`. Existing queues keep their own default; change those in the CUPS web UI under **Set Default Options**.
+* `USE_HOST_AVAHI`: set to `true` to register printers with the host's `avahi-daemon` instead of starting one in the container. Requires mounting the host's `/run/dbus` to `/run/host-dbus` (see **Running on a NAS**). `AVAHI_HOSTNAME` is ignored in this mode; printers are advertised under the host's own name.
 
 ### Ports/Network:
 * Must be run on host network. This is required to support multicasting which is needed for Airprint.
@@ -76,9 +78,20 @@ NAS operating systems (TrueNAS Scale, Synology DSM, UGreen NAS OS, QNAP, etc.) t
 
 Things to try, roughly in order of simplicity:
 
-1. **Set `AVAHI_HOSTNAME`** to a unique value like `cups-airprint` (the default) or `mynas-print`. This avoids the hostname-conflict loop.
-2. **Disable the host's mDNS/Bonjour service.** On TrueNAS Scale this is under **Network → Global Configuration**. On other NAS platforms look for a Bonjour, Avahi, or mDNS setting. This frees UDP 5353 for the container. Trade-off: the NAS itself will no longer advertise over Bonjour, so Time Machine discovery, Finder hostname visibility, and similar features go away.
-3. **Run the container on a macvlan network** instead of host networking. This is the option to reach for if you want to keep the host's own Bonjour working (so you don't have to take the trade-off in option 2). Macvlan gives the container its own MAC and IP on your LAN, so its Avahi is on a different network endpoint from the host's and the two stop fighting over port 5353. **I have not tested this setup myself** and can't offer specific configuration guidance; one user reported success with it in #42 and the [Docker macvlan docs](https://docs.docker.com/network/drivers/macvlan/) are a reasonable starting point. Macvlan generally requires a wired Ethernet parent interface and does not work over Wi-Fi or on Docker Desktop.
+1. **Use the host's Avahi** (recommended if your NAS runs `avahi-daemon`). The container skips its own D-Bus and Avahi and lets CUPS register printers with the host's daemon, so there is only one mDNS responder and the NAS keeps advertising SMB, Time Machine, etc.:
+
+   ```yaml
+   environment:
+     USE_HOST_AVAHI: "true"
+   volumes:
+     - ./config:/config
+     - /run/dbus:/run/host-dbus:ro
+   ```
+
+   Mount the host's D-Bus directory at `/run/host-dbus`, **never** at `/run/dbus` or `/var/run/dbus` (see the upgrade warning above). The host's Avahi D-Bus policy must allow other users to publish services; the stock Debian/Ubuntu policy does.
+2. **Set `AVAHI_HOSTNAME`** to a unique value like `cups-airprint` (the default) or `mynas-print`. This avoids the hostname-conflict loop.
+3. **Disable the host's mDNS/Bonjour service.** On TrueNAS Scale this is under **Network → Global Configuration**. On other NAS platforms look for a Bonjour, Avahi, or mDNS setting. This frees UDP 5353 for the container. Trade-off: the NAS itself will no longer advertise over Bonjour, so Time Machine discovery, Finder hostname visibility, and similar features go away.
+4. **Run the container on a macvlan network** instead of host networking. This is the option to reach for if you want to keep the host's own Bonjour working (so you don't have to take the trade-off in option 2). Macvlan gives the container its own MAC and IP on your LAN, so its Avahi is on a different network endpoint from the host's and the two stop fighting over port 5353. **I have not tested this setup myself** and can't offer specific configuration guidance; one user reported success with it in #42 and the [Docker macvlan docs](https://docs.docker.com/network/drivers/macvlan/) are a reasonable starting point. Macvlan generally requires a wired Ethernet parent interface and does not work over Wi-Fi or on Docker Desktop.
 
 If none of the above works, pinning the image to `1.2.0` is a valid workaround while you sort it out. You'll miss future Alpine / CUPS / Avahi security updates, but the older image advertised through the static service file flow and didn't hit these conflicts as visibly.
 

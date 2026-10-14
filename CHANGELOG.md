@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Optional host Avahi mode** (`USE_HOST_AVAHI=true`): on hosts that already run `avahi-daemon` (most NAS platforms), the container no longer has to run its own D-Bus and Avahi. Mount the host's `/run/dbus` to `/run/host-dbus` (read-only) and CUPS registers printers with the host's daemon over D-Bus. This avoids two mDNS responders fighting over UDP 5353 and the same records on the host network, while the NAS keeps advertising its own services (SMB, Time Machine, ...). The mount path is deliberately not `/run/dbus`, so the host's bus socket can't be clobbered.
+- **Optional `DEFAULT_PAPER_SIZE`**: overrides the baked-in `DefaultPaperSize Letter` (e.g. `A4`) used for newly added printers.
+
 ## v2.1.3
 
 - **AirPrint configuration-profile generator** (`make-airprint-profile.sh`): a helper that creates an Apple `.mobileconfig` for the printers shared by CUPS, pinning each one by hostname/IP so iPhones, iPads, and Macs connect over unicast IPP instead of relying on Bonjour/mDNS discovery. This makes AirPrint reliable on busy/multicast-flaky Wi-Fi and enables printing across subnets/VLANs or over a VPN such as Tailscale. Run `docker exec cups /root/make-airprint-profile.sh [HOST]` — it auto-discovers shared printers and writes `/config/airprint.mobileconfig`. `HOST` defaults to the host's primary IPv4 (auto-detected) and can be overridden with a stable DNS name or Tailscale name/IP. Install the profile on the device via Settings > General > VPN & Device Management.
