@@ -90,6 +90,30 @@ fi
 # the persisted copy in sync so it survives restarts.
 ensure_anonymous_printing
 
+# Paper size used when new queues are created (the image default is Letter).
+if [ -n "$DEFAULT_PAPER_SIZE" ]; then
+    sed -i "s/^DefaultPaperSize .*/DefaultPaperSize ${DEFAULT_PAPER_SIZE}/" /etc/cups/cupsd.conf
+    echo "Default paper size set to ${DEFAULT_PAPER_SIZE}"
+fi
+
+# Optionally register printers with the host's avahi-daemon instead of running
+# our own. NAS hosts usually need their avahi-daemon (SMB, Time Machine, ...),
+# and two daemons on the host network fight over UDP 5353 and the same records.
+#
+# Mount the host's D-Bus socket *directory* somewhere other than /run/dbus (see
+# the README warning about /var/run/dbus) and point libdbus at it:
+#   volumes: - /run/dbus:/run/host-dbus:ro
+#   environment: USE_HOST_AVAHI=true
+HOST_DBUS_SOCKET="${HOST_DBUS_SOCKET:-/run/host-dbus/system_bus_socket}"
+if [ "$USE_HOST_AVAHI" = "true" ]; then
+    if [ ! -S "$HOST_DBUS_SOCKET" ]; then
+        echo "ERROR: USE_HOST_AVAHI=true but $HOST_DBUS_SOCKET is not a socket." >&2
+        echo "Mount the host's /run/dbus to /run/host-dbus (read-only)." >&2
+        exit 1
+    fi
+    export DBUS_SYSTEM_BUS_ADDRESS="unix:path=${HOST_DBUS_SOCKET}"
+fi
+
 # Provide a stable, name-matching TLS certificate for ipps / DNS-SD clients.
 #
 # Linux CUPS clients (via cups-browsed) discover this printer over DNS-SD and
@@ -106,6 +130,10 @@ ensure_anonymous_printing
 # (it uses plain ipp and does not validate the certificate this way).
 provision_tls() {
     tls_name="${AVAHI_HOSTNAME:-cups-airprint}"
+    # The host's avahi-daemon advertises under the host's own name.
+    if [ "$USE_HOST_AVAHI" = "true" ] && [ -z "$AVAHI_HOSTNAME" ]; then
+        tls_name="$(hostname)"
+    fi
 
     # Persist the CUPS SSL keychain across container recreation.
     mkdir -p /config/ssl
@@ -156,19 +184,23 @@ if [ -f /var/run/avahi-daemon.pid ]; then
     rm -f /var/run/avahi-daemon.pid
 fi
 
-# Start avahi-daemon service in the background
-/root/avahi-service.sh &
-AVAHI_SERVICE_PID=$!
+if [ "$USE_HOST_AVAHI" = "true" ]; then
+    echo "Using the host's avahi-daemon via $HOST_DBUS_SOCKET"
+else
+    # Start avahi-daemon service in the background
+    /root/avahi-service.sh &
+    AVAHI_SERVICE_PID=$!
 
-# Wait a moment to ensure avahi-daemon has started and created its PID file
-echo "Waiting for D-Bus and Avahi to be ready..."
-for i in $(seq 1 30); do
-    if [ -S /run/dbus/system_bus_socket ] && [ -f /var/run/avahi-daemon/pid ]; then
-        echo "D-Bus and Avahi ready after ${i}s"
-        break
-    fi
-    sleep 1
-done
+    # Wait a moment to ensure avahi-daemon has started and created its PID file
+    echo "Waiting for D-Bus and Avahi to be ready..."
+    for i in $(seq 1 30); do
+        if [ -S /run/dbus/system_bus_socket ] && [ -f /var/run/avahi-daemon/pid ]; then
+            echo "D-Bus and Avahi ready after ${i}s"
+            break
+        fi
+        sleep 1
+    done
+fi
 
 # Start CUPS and printer update
 /root/printer-update.sh &
