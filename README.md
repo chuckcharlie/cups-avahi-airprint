@@ -22,18 +22,18 @@ See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 ## Configuration
 
 ### Volumes:
-* `/config`: where the persistent printer configs are stored. This now also includes `/config/ssl`, where the self-signed TLS certificate and private key are kept so they stay stable across container restarts. The key is only used for the printer's own self-signed cert; keep this volume private.
+* `/config`: persistent printer configuration, including `/config/ssl`, which holds the self-signed TLS certificate and private key so they stay stable across container restarts. Keep this volume private.
 
 ### Variables:
 * `CUPSADMIN`: the CUPS admin user you want created - defaults to `cupsadmin` if unspecified
 * `CUPSPASSWORD`: the password for the CUPS admin user - default is the same value as `CUPSADMIN` if unspecified
 * `AVAHI_HOSTNAME`: the mDNS hostname Avahi will advertise - default is `cups-airprint`. Set this to a unique name if you have multiple instances, or if the default conflicts with your host's mDNS daemon (common on NAS devices like UGreen, Synology, etc.)
 * `TZ`: optional IANA timezone name (e.g. `Europe/Vienna`, `America/Los_Angeles`) used for log timestamps inside the container. Defaults to UTC if unset or invalid.
-* `DEFAULT_PAPER_SIZE`: optional CUPS paper size name used as the default for newly added printers - default is `Letter`. Must be one of the sizes in the image's `ReadyPaperSizes` list (`A4`, `A5`, `A6`, `B5`, `Letter`, `Legal`, `Postcard`, `ENV10`, `EnvDL`, `ENVC6`, and the photo sizes); an unrecognized value is ignored with a warning in the container log rather than applied, since a wrong default makes iOS print to a size the printer can't feed. Existing queues keep their own default; change those in the CUPS web UI under **Set Default Options**. Note that the setting is written into the persisted `/config/cupsd.conf`, so removing the variable later does not revert to `Letter` - set it back explicitly, or change it in the web UI.
-* `USE_HOST_AVAHI`: set to `true` to register printers with the host's `avahi-daemon` instead of starting one in the container. Requires mounting the host's `/run/dbus` to `/run/host-dbus` (see **Running on a NAS**). Printers are advertised under the host's own name, because the host's daemon owns that record - so `AVAHI_HOSTNAME` cannot change what is advertised in this mode. It does still set the `ServerName` used for the `ipps://` certificate, so leave it unset here and the certificate will match the name the host advertises.
+* `DEFAULT_PAPER_SIZE`: paper size used as the default for *newly added* printers - default is `Letter`. Must be one of the names in the image's `ReadyPaperSizes` (`Letter`, `Legal`, `A4`, `A5`, `A6`, `B5`, `Postcard`, plus envelope and photo sizes); anything else is ignored with a warning in the container log, since a wrong default makes iOS print to a size the printer can't feed. Existing queues keep their own default - change those in the web UI under **Set Default Options**. The value is written into the persisted `/config/cupsd.conf`, so removing the variable later does not revert to `Letter`.
+* `USE_HOST_AVAHI`: set to `true` to let CUPS register printers with the *host's* `avahi-daemon` instead of starting one in the container. For hosts that already run Avahi, typically a NAS - see **Running on a NAS** for the required mount and what it grants the container. Printers are advertised under the host's own name, so `AVAHI_HOSTNAME` has no effect on discovery in this mode; leave it unset.
 
 ### Ports/Network:
-* Must be run on host network. This is required to support multicasting which is needed for Airprint.
+* Must be run on host network. This is required to support multicasting which is needed for Airprint, and it applies with `USE_HOST_AVAHI` too - the host's Avahi advertises the host's own address, so the container has to be on it.
 * **Security note:** host networking exposes the CUPS web admin and printing on port `631` to your whole LAN, the print path accepts jobs without authentication, and traffic is not meaningfully encrypted. Set a strong `CUPSADMIN`/`CUPSPASSWORD` and only run this on a trusted network.
 
 ### Example run command:
@@ -66,9 +66,34 @@ services:
 * CUPS will be configurable at http://[host ip]:631 using the CUPSADMIN/CUPSPASSWORD.
 * Make sure you select `Share This Printer` when configuring the printer in CUPS.
 
+## Reliable / remote AirPrint (configuration profile)
+
+AirPrint normally finds printers over multicast mDNS (Bonjour). On busy Wi-Fi this can be unreliable (the printer shows up only after retrying), and it does not work across subnets/VLANs or over a VPN. If you hit this, you can install an Apple **configuration profile** that pins the printer by address, so your devices connect over unicast IPP and skip discovery entirely.
+
+The image includes a generator script:
+
+```
+docker exec cups /root/make-airprint-profile.sh [HOST]
+```
+
+* It auto-discovers every printer you've marked **Share This Printer** and writes `/config/airprint.mobileconfig` (on your mounted `/config` volume).
+* `HOST` is optional - the host's primary IPv4 address is auto-detected, and the script prints what it chose along with the host's other addresses so you can re-run with a different one. Pass a value to use a stable DNS name, or a Tailscale name/IP for remote / cross-VLAN printing — for example:
+
+  ```
+  docker exec cups /root/make-airprint-profile.sh printserver.lan
+  ```
+
+To install: copy `airprint.mobileconfig` off your `/config` volume, AirDrop or email it to your iPhone/iPad/Mac, then install it via **Settings → General → VPN & Device Management**. The printer will then be available without relying on Bonjour, and reachable anywhere your device can route to the host on port 631 (e.g. over Tailscale).
+
+Notes:
+* The profile uses plain IPP (no TLS), matching this image's default - fine on a LAN or an encrypted overlay like Tailscale.
+* If an auto-detected IP later changes (DHCP), re-run the script, or use a reserved IP / DNS name to avoid it.
+
 ## Running on a NAS
 
-First, make sure you've removed any `- /var/run/dbus:/var/run/dbus` bind mount from your compose (see the upgrade warning under **Changelog** above). That's the single most damaging misconfiguration on a NAS and will take down host services like the management UI.
+> Skip this unless your host runs its own Avahi/Bonjour daemon. Most NAS operating systems do; a plain Linux host usually doesn't.
+
+First, remove any `- /var/run/dbus:/var/run/dbus` bind mount from your compose (see the upgrade warning under **Changelog**) - it's the most damaging misconfiguration on a NAS and takes down host services like the management UI.
 
 NAS operating systems (TrueNAS Scale, Synology DSM, UGreen NAS OS, QNAP, etc.) typically run their own `avahi-daemon` on the host to advertise things like SMB shares, Time Machine, and Finder hostname visibility. When this container runs in host networking mode, both Avahi daemons share the host's network stack and can collide. Common symptoms:
 
@@ -89,32 +114,11 @@ Things to try, roughly in order of simplicity:
    ```
 
    Mount the host's D-Bus directory at `/run/host-dbus`, **never** at `/run/dbus` or `/var/run/dbus` (see the upgrade warning above). The host's Avahi D-Bus policy must allow other users to publish services; the stock Debian/Ubuntu policy does.
-2. **Set `AVAHI_HOSTNAME`** to a unique value like `cups-airprint` (the default) or `mynas-print`. This avoids the hostname-conflict loop.
+
+   Know what the mount grants: `/run/dbus` is the host's entire system bus, not an Avahi-only channel, so the container can also reach services like systemd and polkit on it. `:ro` doesn't limit that - it makes the directory read-only, and connecting to a socket isn't a write. If you'd rather not grant that, option 2 fixes the hostname-conflict case with no mount.
+2. **Set `AVAHI_HOSTNAME`** to a unique value like `cups-airprint` (the default) or `mynas-print`. This avoids the hostname-conflict loop, and needs no mount or host trust - try it first if the conflict loop is your only symptom.
 3. **Disable the host's mDNS/Bonjour service.** On TrueNAS Scale this is under **Network → Global Configuration**. On other NAS platforms look for a Bonjour, Avahi, or mDNS setting. This frees UDP 5353 for the container. Trade-off: the NAS itself will no longer advertise over Bonjour, so Time Machine discovery, Finder hostname visibility, and similar features go away.
-4. **Run the container on a macvlan network** instead of host networking. This is the option to reach for if you want to keep the host's own Bonjour working (so you don't have to take the trade-off in option 3). Macvlan gives the container its own MAC and IP on your LAN, so its Avahi is on a different network endpoint from the host's and the two stop fighting over port 5353. **I have not tested this setup myself** and can't offer specific configuration guidance; one user reported success with it in #42 and the [Docker macvlan docs](https://docs.docker.com/network/drivers/macvlan/) are a reasonable starting point. Macvlan generally requires a wired Ethernet parent interface and does not work over Wi-Fi or on Docker Desktop.
+4. **Run the container on a macvlan network** instead of host networking. The container gets its own MAC and IP, so its Avahi stops competing with the host's and the NAS keeps its own Bonjour - the same outcome as option 1, without granting the container any host access. Requires a wired Ethernet parent interface; it does not work over Wi-Fi or on Docker Desktop. **Untested by me**; one user reported success in #42, and the [Docker macvlan docs](https://docs.docker.com/network/drivers/macvlan/) are a reasonable starting point.
 
-If none of the above works, pinning the image to `1.2.0` is a valid workaround while you sort it out. You'll miss future Alpine / CUPS / Avahi security updates, but the older image advertised through the static service file flow and didn't hit these conflicts as visibly.
-
-## Reliable / remote AirPrint (configuration profile)
-
-AirPrint normally finds printers over multicast mDNS (Bonjour). On busy Wi-Fi this can be unreliable (the printer shows up only after retrying), and it does not work across subnets/VLANs or over a VPN. If you hit this, you can install an Apple **configuration profile** that pins the printer by address, so your devices connect over unicast IPP and skip discovery entirely.
-
-The image includes a generator script:
-
-```
-docker exec cups /root/make-airprint-profile.sh [HOST]
-```
-
-* It auto-discovers every printer you've marked **Share This Printer** and writes `/config/airprint.mobileconfig` (on your mounted `/config` volume).
-* `HOST` is optional. If omitted, the host's primary IPv4 address is auto-detected; the script prints what it chose and lists the host's other addresses so you can re-run with a different one if needed. Pass a value to use a stable DNS name, or a Tailscale name/IP for remote / cross-VLAN printing — for example:
-
-  ```
-  docker exec cups /root/make-airprint-profile.sh printserver.lan
-  ```
-
-To install: copy `airprint.mobileconfig` off your `/config` volume, AirDrop or email it to your iPhone/iPad/Mac, then install it via **Settings → General → VPN & Device Management**. The printer will then be available without relying on Bonjour, and reachable anywhere your device can route to the host on port 631 (e.g. over Tailscale).
-
-Notes:
-* The profile uses plain IPP (no TLS), matching this image's default. On a LAN or an encrypted overlay like Tailscale this is fine.
-* If you used an auto-detected IP and it later changes (DHCP), re-run the script — or use a reserved IP / DNS name to avoid that.
+If none of these work, pinning the image to `1.2.0` is a valid stopgap - it advertised through static service files and didn't hit these conflicts, at the cost of missing future Alpine / CUPS / Avahi security updates.
 
