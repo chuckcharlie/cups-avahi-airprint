@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v2.2.0
 
 - **Optional host Avahi mode** (`USE_HOST_AVAHI=true`): on hosts that already run `avahi-daemon` (most NAS platforms), the container no longer has to run its own D-Bus and Avahi. Mount the host's `/run/dbus` to `/run/host-dbus` (read-only) and CUPS registers printers with the host's daemon over D-Bus. This avoids two mDNS responders fighting over UDP 5353 and the same records on the host network, while the NAS keeps advertising its own services (SMB, Time Machine, ...). The mount path is deliberately not `/run/dbus`, so the host's bus socket can't be clobbered.
 - **Optional `DEFAULT_PAPER_SIZE`**: overrides the baked-in `DefaultPaperSize Letter` (e.g. `A4`) used for newly added printers.
