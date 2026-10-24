@@ -115,6 +115,8 @@ Things to try, roughly in order of simplicity:
 
    Mount the host's D-Bus directory at `/run/host-dbus`, **never** at `/run/dbus` or `/var/run/dbus` (see the upgrade warning above). The host's Avahi D-Bus policy must allow other users to publish services; the stock Debian/Ubuntu policy does.
 
+   If the host's Avahi can't be reached - not running, or its policy refuses the connection - the container says so in its log every 10 seconds instead of looking healthy while advertising nothing. Local printing keeps working either way. The message also tells you which case you're in: CUPS registers the printers by itself once the host starts Avahi, but if the bus connection was refused it does not retry, so you have to restart the container after fixing the policy.
+
    Know what the mount grants: `/run/dbus` is the host's entire system bus, not an Avahi-only channel, so the container can also reach services like systemd and polkit on it. `:ro` doesn't limit that - it makes the directory read-only, and connecting to a socket isn't a write. If you'd rather not grant that, option 2 fixes the hostname-conflict case with no mount.
 2. **Set `AVAHI_HOSTNAME`** to a unique value like `cups-airprint` (the default) or `mynas-print`. This avoids the hostname-conflict loop, and needs no mount or host trust - try it first if the conflict loop is your only symptom.
 3. **Disable the host's mDNS/Bonjour service.** On TrueNAS Scale this is under **Network → Global Configuration**. On other NAS platforms look for a Bonjour, Avahi, or mDNS setting. This frees UDP 5353 for the container. Trade-off: the NAS itself will no longer advertise over Bonjour, so Time Machine discovery, Finder hostname visibility, and similar features go away.
