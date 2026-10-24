@@ -146,6 +146,58 @@ if [ "$USE_HOST_AVAHI" = "true" ]; then
         exit 1
     fi
     export DBUS_SYSTEM_BUS_ADDRESS="unix:path=${HOST_DBUS_SOCKET}"
+
+    # A present socket does not mean Avahi is reachable on it: the host may not
+    # run avahi-daemon at all, or the bus policy may refuse the connection.
+    # CUPS then advertises nothing, and the only trace is "Unable to
+    # communicate with avahi-daemon" in the cupsd error log -- from the outside
+    # the container looks healthy and the printer is simply undiscoverable. So
+    # report it on stdout, where "docker logs" will show it, and keep repeating
+    # until it works.
+    #
+    # The two failure modes need different advice (CUPS scheduler/dirsvc.c):
+    #   - Bus reachable, Avahi absent: cupsd's client is created with
+    #     AVAHI_CLIENT_NO_FAIL, so it survives the daemon being away. When
+    #     Avahi appears, dnssdClientCallback() gets AVAHI_CLIENT_S_RUNNING and
+    #     calls dnssdRegisterAllPrinters(). Self-healing, no restart needed.
+    #   - Bus connection fails: avahi_client_new() returns NULL, cupsd frees
+    #     the threaded poll and clears DNSSDMaster, so no callback can ever
+    #     fire again. Fixing the host afterwards is not enough on its own --
+    #     this container has to be restarted to re-register.
+    #
+    # Backgrounded so CUPS and local printing come up regardless, and traced
+    # output is turned off so the retry loop doesn't fill the container log.
+    (
+        set +x
+        saw_bus_failure=
+        warned=
+        while true; do
+            if dbus-send --system --dest=org.freedesktop.Avahi --print-reply=literal \
+                    / org.freedesktop.Avahi.Server.GetVersionString >/dev/null 2>&1; then
+                if [ -n "$warned" ]; then
+                    if [ -n "$saw_bus_failure" ]; then
+                        echo "Avahi is answering on ${HOST_DBUS_SOCKET} now, but CUPS stopped retrying when the bus connection failed earlier. Restart this container so printers are registered."
+                    else
+                        echo "Avahi is answering on ${HOST_DBUS_SOCKET} now; CUPS is registering printers for Bonjour broadcasting."
+                    fi
+                fi
+                break
+            fi
+
+            # Distinguish "no Avahi on a working bus" from "no usable bus" with
+            # a call every D-Bus answers, rather than matching error strings.
+            if dbus-send --system --dest=org.freedesktop.DBus --print-reply=literal \
+                    /org/freedesktop/DBus org.freedesktop.DBus.GetId >/dev/null 2>&1; then
+                echo "WARNING: USE_HOST_AVAHI=true but avahi-daemon is not on ${HOST_DBUS_SOCKET} yet, so no printers are being advertised. CUPS will register them automatically once the host starts Avahi. Retrying in 10s." >&2
+            else
+                saw_bus_failure=1
+                echo "WARNING: USE_HOST_AVAHI=true but the D-Bus at ${HOST_DBUS_SOCKET} refused the connection, so no printers are being advertised and CUPS will not retry on its own. Check that the host runs avahi-daemon and that its D-Bus policy permits publishing, then restart this container. Retrying in 10s." >&2
+            fi
+
+            warned=1
+            sleep 10
+        done
+    ) &
 fi
 
 # Provide a stable, name-matching TLS certificate for ipps / DNS-SD clients.
