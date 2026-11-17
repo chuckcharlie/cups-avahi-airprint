@@ -75,7 +75,7 @@ get_shared_printers() {
         /^<(Default)?Printer / { name=$2; sub(/>$/,"",name); info=name; shared=0 }
         /^Info /              { tmp=$0; sub(/^Info /,"",tmp); info=tmp }
         /^Shared Yes/         { shared=1 }
-        /^<\/Printer>/        { if (shared) print name "|" info }
+        /^<\/(Default)?Printer>/ { if (shared) print name "|" info }
     ' "$PRINTERS_CONF" 2>/dev/null
 }
 
