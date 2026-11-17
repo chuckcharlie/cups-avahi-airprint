@@ -217,8 +217,15 @@ fi
 provision_tls() {
     tls_name="${AVAHI_HOSTNAME:-cups-airprint}"
     # The host's avahi-daemon advertises under the host's own name.
-    if [ "$USE_HOST_AVAHI" = "true" ] && [ -z "$AVAHI_HOSTNAME" ]; then
-        tls_name="$(hostname)"
+    # AVAHI_HOSTNAME still overrides it, for a host whose Avahi advertises a
+    # name other than its hostname, but it is usually left over from the older
+    # NAS advice to set it, and then the certificate no longer matches.
+    if [ "$USE_HOST_AVAHI" = "true" ]; then
+        if [ -z "$AVAHI_HOSTNAME" ]; then
+            tls_name="$(hostname)"
+        else
+            echo "Warning: AVAHI_HOSTNAME=${AVAHI_HOSTNAME} is set with USE_HOST_AVAHI=true. The host's avahi-daemon advertises printers under the host's own name, so ipps:// clients may report cups-pki-invalid. Unset AVAHI_HOSTNAME unless it matches the host's mDNS name."
+        fi
     fi
 
     # Persist the CUPS SSL keychain across container recreation.
