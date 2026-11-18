@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.2.1
+
+- **`CUPSPASSWORD` no longer appears in the container log**: `run_cups.sh` traces its startup with `set -x`, which printed the admin password in clear text on every container start, and from there into anything that collects container logs. Tracing is now switched off for the credential block only. The password is also passed to `chpasswd` quoted, so one containing spaces or `*`-style characters is set exactly as written instead of being mangled. Thanks to @zzzaspany ([#61](https://github.com/chuckcharlie/cups-avahi-airprint/pull/61)).
+
 ## v2.2.0
 
 - **Optional host Avahi mode** (`USE_HOST_AVAHI=true`): on hosts that already run `avahi-daemon` (most NAS platforms), the container no longer has to run its own D-Bus and Avahi. Mount the host's `/run/dbus` to `/run/host-dbus` (read-only) and CUPS registers printers with the host's daemon over D-Bus. This avoids two mDNS responders fighting over UDP 5353 and the same records on the host network, while the NAS keeps advertising its own services (SMB, Time Machine, ...). The mount path is deliberately not `/run/dbus`, so the host's bus socket can't be clobbered. If the host's Avahi turns out not to be reachable, the container reports it in the log every 10 seconds rather than starting up as though all were well — previously the only trace was an `Unable to communicate with avahi-daemon` line in the cupsd error log, so the container looked healthy while no printer was discoverable. Local printing is unaffected either way, and the message distinguishes the two cases: CUPS re-registers on its own when a missing Avahi appears, but a refused bus connection is not retried and needs a container restart.
