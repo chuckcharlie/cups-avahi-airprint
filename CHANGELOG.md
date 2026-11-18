@@ -2,7 +2,7 @@
 
 ## v2.2.1
 
-- **`CUPSPASSWORD` no longer appears in the container log**: `run_cups.sh` traces its startup with `set -x`, which printed the admin password in clear text on every container start, and from there into anything that collects container logs. Tracing is now switched off for the credential block only. The password is also passed to `chpasswd` quoted, so one containing spaces or `*`-style characters is set exactly as written instead of being mangled. Thanks to @zzzaspany ([#61](https://github.com/chuckcharlie/cups-avahi-airprint/pull/61)).
+- **`CUPSPASSWORD` no longer appears in the container log**: `run_cups.sh` traces its startup with `set -x`, which printed the admin password in clear text on every container start, and from there into anything that collects container logs. Tracing is now switched off for the credential block only. The password is also passed to `chpasswd` quoted, so it is set exactly as written: previously, two or more spaces in a row were collapsed to one and trailing spaces were dropped. If your password contains either, the full password is what works after upgrading. Thanks to @zzzaspany ([#61](https://github.com/chuckcharlie/cups-avahi-airprint/pull/61)).
 
 ## v2.2.0
 

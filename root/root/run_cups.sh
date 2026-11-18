@@ -14,16 +14,8 @@ if [ -n "$TZ" ]; then
     fi
 fi
 
-# Tracing is off for the credential block.
-#
-# `set -x` above traces every command with its arguments already expanded, so this block printed
-# CUPSPASSWORD in clear text on every start - twice: once as `+ '[' -z <password> ]` from the
-# default-value test, and once as `+ echo <user>:<password>`. That goes to the container log, and
-# from there into whatever collects container logs. Measured on one host before this change: 20
-# copies of the password in the journal, the oldest a month old.
-#
-# Tracing is restored immediately afterwards, because it is genuinely useful for the rest of the
-# startup and that is worth keeping.
+# Tracing is off for the credential block: `set -x` would print CUPSPASSWORD
+# in clear text in the container log. Restored right after.
 set +x
 
 # Is CUPSADMIN set? If not, set to default
@@ -36,8 +28,8 @@ if [ -z "$CUPSPASSWORD" ]; then
     CUPSPASSWORD=$CUPSADMIN
 fi
 
-# Quoted, and printf rather than echo: unquoted, a password containing whitespace or a glob
-# character was silently mangled or split before it ever reached chpasswd.
+# Quoted, and printf rather than echo, so the password reaches chpasswd exactly
+# as set: unquoted, repeated or trailing spaces were collapsed or dropped.
 if [ "$(grep -ci "$CUPSADMIN" /etc/shadow)" -eq 0 ]; then
     adduser -S -G lpadmin --no-create-home "$CUPSADMIN"
 fi
